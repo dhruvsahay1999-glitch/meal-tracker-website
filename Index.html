@@ -1,0 +1,361 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Meal Tracker</title>
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- React and Babel -->
+    <script src="https://unpkg.com/react@18/umd/react.development.js"></script>
+    <script src="https://unpkg.com/react-dom@18/umd/react-dom.development.js"></script>
+    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+    <!-- Inter Font -->
+    <link rel="stylesheet" href="https://rsms.me/inter/inter.css">
+    <!-- Firebase SDKs -->
+    <script type="module">
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
+        import { getAuth, onAuthStateChanged, createUserWithEmailAndPassword, signInWithEmailAndPassword, updateProfile, signOut } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
+        import { getFirestore, collection, addDoc, query, where, onSnapshot, serverTimestamp, orderBy, setLogLevel } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
+        
+        // Your web app's Firebase configuration
+        const firebaseConfig = {
+          apiKey: "AIzaSyCTZFIdzJViGyRgUxLn3pPDbPrTJfEHwTw",
+          authDomain: "meal-tracker-8dc47.firebaseapp.com",
+          projectId: "meal-tracker-8dc47",
+          storageBucket: "meal-tracker-8dc47.appspot.com",
+          messagingSenderId: "723551414870",
+          appId: "1:723551414870:web:7149e658f0bf586e96a9f7",
+          measurementId: "G-N2P30GC34Y"
+        };
+
+        // Initialize Firebase
+        const app = initializeApp(firebaseConfig);
+        const auth = getAuth(app);
+        const db = getFirestore(app);
+        setLogLevel('debug'); // For more detailed logs
+
+        window.firebase = { auth, db, onAuthStateChanged, createUserWithEmailAndPassword, signInWithEmailAndPassword, updateProfile, signOut, collection, addDoc, query, where, onSnapshot, serverTimestamp, orderBy };
+    </script>
+    <style>
+        body {
+            font-family: 'Inter', sans-serif;
+            -webkit-tap-highlight-color: transparent;
+        }
+        .auth-card {
+            animation: fadeIn 0.5s ease-in-out;
+        }
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(10px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+    </style>
+</head>
+<body class="bg-gray-100">
+    <div id="root"></div>
+
+    <script type="text/babel">
+        const { useState, useMemo, useEffect, Fragment } = React;
+
+        // --- Helper Constants ---
+        const CATEGORY_COLORS = {
+            Healthy: { text: 'text-green-600', border: 'border-green-600', bg: 'bg-green-600' },
+            Processed: { text: 'text-red-600', border: 'border-red-600', bg: 'bg-red-600' },
+            'Order in': { text: 'text-yellow-500', border: 'border-yellow-500', bg: 'bg-yellow-500' },
+        };
+        const MEAL_OPTIONS = ["Breakfast", "Lunch", "Dinner", "Snacks", "Late Night Munchies"];
+
+        // --- Authentication Screen Component ---
+        const AuthScreen = () => {
+            const [isLogin, setIsLogin] = useState(true);
+            const [email, setEmail] = useState('');
+            const [password, setPassword] = useState('');
+            const [username, setUsername] = useState('');
+            const [error, setError] = useState('');
+            const [loading, setLoading] = useState(false);
+            const { auth, createUserWithEmailAndPassword, updateProfile, signInWithEmailAndPassword } = window.firebase;
+
+            const handleSubmit = async (e) => {
+                e.preventDefault();
+                setLoading(true);
+                setError('');
+                try {
+                    if (isLogin) {
+                        await signInWithEmailAndPassword(auth, email, password);
+                    } else {
+                        if(username.length < 3) throw new Error("Username must be at least 3 characters.");
+                        const userCredential = await createUserWithEmailAndPassword(auth, email, password);
+                        await updateProfile(userCredential.user, { displayName: username });
+                    }
+                } catch (err) {
+                    setError(err.message.replace('Firebase: ', ''));
+                } finally {
+                    setLoading(false);
+                }
+            };
+            
+            return (
+                <div className="min-h-screen flex items-center justify-center bg-gray-50 p-4">
+                    <div className="max-w-md w-full space-y-8 bg-white p-10 rounded-xl shadow-lg auth-card">
+                        <div>
+                            <h2 className="mt-6 text-center text-3xl font-extrabold text-gray-900">
+                                {isLogin ? 'Sign in to your account' : 'Create a new account'}
+                            </h2>
+                        </div>
+                        <form className="mt-8 space-y-6" onSubmit={handleSubmit}>
+                            {!isLogin && (
+                                <input
+                                    type="text"
+                                    className="appearance-none rounded-md relative block w-full px-3 py-3 border border-gray-300 placeholder-gray-500 text-gray-900 focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm"
+                                    placeholder="Username"
+                                    value={username}
+                                    onChange={(e) => setUsername(e.target.value)}
+                                    required
+                                />
+                            )}
+                            <input
+                                type="email"
+                                autoComplete="email"
+                                className="appearance-none rounded-md relative block w-full px-3 py-3 border border-gray-300 placeholder-gray-500 text-gray-900 focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm"
+                                placeholder="Email address"
+                                value={email}
+                                onChange={(e) => setEmail(e.target.value)}
+                                required
+                            />
+                            <input
+                                type="password"
+                                autoComplete="current-password"
+                                className="appearance-none rounded-md relative block w-full px-3 py-3 border border-gray-300 placeholder-gray-500 text-gray-900 focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm"
+                                placeholder="Password"
+                                value={password}
+                                onChange={(e) => setPassword(e.target.value)}
+                                required
+                            />
+                            {error && <p className="text-sm text-red-600 text-center">{error}</p>}
+                            <div>
+                                <button
+                                    type="submit"
+                                    disabled={loading}
+                                    className="group relative w-full flex justify-center py-3 px-4 border border-transparent text-sm font-medium rounded-md text-white bg-indigo-600 hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 disabled:bg-indigo-400"
+                                >
+                                    {loading ? 'Processing...' : (isLogin ? 'Sign in' : 'Sign up')}
+                                </button>
+                            </div>
+                        </form>
+                        <p className="mt-2 text-center text-sm text-gray-600">
+                            {isLogin ? "Don't have an account?" : 'Already have an account?'}
+                            <button onClick={() => { setIsLogin(!isLogin); setError('')}} className="font-medium text-indigo-600 hover:text-indigo-500 ml-1">
+                                {isLogin ? 'Sign up' : 'Sign in'}
+                            </button>
+                        </p>
+                    </div>
+                </div>
+            );
+        };
+
+        // --- Main Tracker Screen Component ---
+        const TrackerScreen = ({ user }) => {
+            const [meals, setMeals] = useState([]);
+            const [modalVisible, setModalVisible] = useState(false);
+            const [newMealName, setNewMealName] = useState('');
+            const [selectedCategory, setSelectedCategory] = useState(null);
+            const [selectedMealType, setSelectedMealType] = useState(null);
+            const [newMealDate, setNewMealDate] = useState(new Date().toISOString().split('T')[0]);
+            const [errorMessage, setErrorMessage] = useState('');
+            const { db, auth, signOut, collection, addDoc, query, where, onSnapshot, serverTimestamp, orderBy } = window.firebase;
+
+            useEffect(() => {
+                if (!user) return;
+                const mealsCollection = collection(db, 'meals');
+                const q = query(mealsCollection, where("userId", "==", user.uid), orderBy("createdAt", "desc"));
+
+                const unsubscribe = onSnapshot(q, (snapshot) => {
+                    const mealsData = snapshot.docs.map(doc => ({
+                        id: doc.id,
+                        ...doc.data(),
+                        // Convert Firestore Timestamp to JS Date string
+                        date: doc.data().date.toDate().toISOString()
+                    }));
+                    setMeals(mealsData);
+                });
+                
+                return () => unsubscribe(); // Cleanup listener on component unmount
+            }, [user]);
+            
+            useEffect(() => {
+                document.body.style.overflow = modalVisible ? 'hidden' : 'auto';
+            }, [modalVisible]);
+
+
+            const handleAddMeal = async () => {
+                if (!newMealName.trim() || !selectedCategory || !selectedMealType || !newMealDate) {
+                    setErrorMessage("Please fill out all fields.");
+                    return;
+                }
+                
+                const mealDate = new Date(newMealDate);
+                const now = new Date();
+                mealDate.setHours(now.getHours(), now.getMinutes(), now.getSeconds());
+
+                try {
+                    await addDoc(collection(db, 'meals'), {
+                        userId: user.uid,
+                        name: newMealName,
+                        category: selectedCategory,
+                        mealType: selectedMealType,
+                        date: mealDate,
+                        createdAt: serverTimestamp()
+                    });
+                    closeModal();
+                } catch (e) {
+                    setErrorMessage("Error adding meal. Please try again.");
+                    console.error("Error adding document: ", e);
+                }
+            };
+            
+            const handleSignOut = () => {
+                signOut(auth);
+            }
+
+            const closeModal = () => {
+                setModalVisible(false);
+                setNewMealName('');
+                setSelectedCategory(null);
+                setSelectedMealType(null);
+                setNewMealDate(new Date().toISOString().split('T')[0]);
+                setErrorMessage('');
+            };
+            
+            // Re-usable components from previous version
+            const Analytics = ({ meals }) => {
+                const analyticsData = useMemo(() => {
+                    const sevenDaysAgo = new Date();
+                    sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
+                    sevenDaysAgo.setHours(0, 0, 0, 0);
+
+                    const recentMeals = meals.filter(meal => new Date(meal.date) >= sevenDaysAgo);
+
+                    return recentMeals.reduce((acc, meal) => {
+                        acc[meal.category] = (acc[meal.category] || 0) + 1;
+                        return acc;
+                    }, { Healthy: 0, Processed: 0, 'Order in': 0 });
+                }, [meals]);
+
+                return (
+                    <div className="bg-white p-5 rounded-xl shadow-sm mb-6">
+                        <h2 className="text-xl font-bold text-gray-800 mb-4">Last 7 Days Summary</h2>
+                        <div className="grid grid-cols-3 gap-4 text-center">
+                            {Object.keys(analyticsData).map(category => (
+                                <div key={category}>
+                                    <p className={`text-3xl font-extrabold ${CATEGORY_COLORS[category].text}`}>{analyticsData[category]}</p>
+                                    <p className={`text-sm font-semibold ${CATEGORY_COLORS[category].text}`}>{category}</p>
+                                </div>
+                            ))}
+                        </div>
+                    </div>
+                );
+            };
+            const MealItem = ({ item }) => {
+                const itemDate = new Date(item.date);
+                return (
+                    <div className="bg-white p-4 rounded-xl shadow-md flex justify-between items-center mb-4">
+                        <div>
+                            <div className="flex items-center gap-3 mb-1">
+                                <p className="text-lg font-semibold text-gray-800">{item.name}</p>
+                                <span className="text-xs font-medium text-blue-800 bg-blue-100 px-2.5 py-0.5 rounded-full">{item.mealType}</span>
+                            </div>
+                            <p className="text-sm text-gray-500">
+                                {itemDate.toLocaleDateString(undefined, { year: 'numeric', month: 'long', day: 'numeric' })} - {itemDate.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                            </p>
+                        </div>
+                        <p className={`text-base font-bold ${CATEGORY_COLORS[item.category]?.text}`}>
+                            {item.category}
+                        </p>
+                    </div>
+                );
+            };
+            const AddMealModal = () => (
+                <div className="fixed inset-0 bg-black bg-opacity-50 flex items-end justify-center z-50 transition-opacity duration-300" onClick={closeModal}>
+                    <div className="bg-white w-full max-w-lg rounded-t-2xl p-6 shadow-xl transform transition-transform duration-300 translate-y-0" onClick={e => e.stopPropagation()}>
+                        <h2 className="text-2xl font-bold text-gray-800 text-center mb-6">Track a New Meal</h2>
+                        <input type="text" className="w-full p-3 border border-gray-300 rounded-lg mb-4 focus:ring-2 focus:ring-blue-500 outline-none" placeholder="e.g., Avocado Toast" value={newMealName} onChange={(e) => setNewMealName(e.target.value)} />
+                        <label className="text-md text-gray-600 mb-2 font-semibold block">Date of Meal</label>
+                        <input type="date" className="w-full p-3 border border-gray-300 rounded-lg mb-4 focus:ring-2 focus:ring-blue-500 outline-none" value={newMealDate} onChange={(e) => setNewMealDate(e.target.value)} />
+                        <p className="text-md text-gray-600 mb-2 font-semibold">Meal Type</p>
+                        <div className="flex flex-wrap gap-2 mb-4">
+                             {MEAL_OPTIONS.map(type => (<button key={type} className={`py-2 px-4 rounded-full border-2 text-sm font-semibold transition-colors ${selectedMealType === type ? 'bg-blue-600 text-white border-blue-600' : 'text-blue-600 border-blue-600 bg-white hover:bg-blue-50'}`} onClick={() => setSelectedMealType(type)}>{type}</button>))}
+                        </div>
+                        <p className="text-md text-gray-600 mb-2 font-semibold">Category</p>
+                        <div className="grid grid-cols-3 gap-2 mb-4">
+                            {Object.keys(CATEGORY_COLORS).map(category => (<button key={category} className={`flex-1 py-2 px-4 rounded-full border-2 font-semibold transition-colors ${selectedCategory === category ? `${CATEGORY_COLORS[category].bg} text-white ${CATEGORY_COLORS[category].border}` : `${CATEGORY_COLORS[category].text} ${CATEGORY_COLORS[category].border} bg-white hover:bg-gray-50`}`} onClick={() => setSelectedCategory(category)}>{category}</button>))}
+                        </div>
+                        {errorMessage && <p className="text-red-500 text-center text-sm mb-4">{errorMessage}</p>}
+                        <div className="flex justify-between space-x-4 mt-6">
+                            <button className="flex-1 bg-gray-600 text-white py-3 rounded-lg font-bold hover:bg-gray-700 transition-colors" onClick={closeModal}>Cancel</button>
+                            <button className="flex-1 bg-blue-600 text-white py-3 rounded-lg font-bold hover:bg-blue-700 transition-colors" onClick={handleAddMeal}>Add Meal</button>
+                        </div>
+                    </div>
+                </div>
+            );
+
+            // --- Render ---
+            return (
+                <div className="min-h-screen">
+                    <header className="bg-white shadow-sm">
+                        <div className="max-w-3xl mx-auto p-4 flex justify-between items-center">
+                            <h1 className="text-xl font-bold text-gray-800">Welcome, {user.displayName || 'User'}!</h1>
+                            <button onClick={handleSignOut} className="bg-red-500 text-white py-2 px-4 rounded-lg font-semibold hover:bg-red-600 transition-colors">Sign Out</button>
+                        </div>
+                    </header>
+                    <main className="max-w-3xl mx-auto p-4 sm:p-6 pb-24">
+                        <Analytics meals={meals} />
+                        {meals.length > 0 ? (
+                            <div>
+                                {meals.map(item => <MealItem key={item.id} item={item} />)}
+                            </div>
+                        ) : (
+                            <div className="text-center py-16 px-4 bg-white rounded-xl shadow-sm">
+                                <p className="text-gray-500 text-lg">No meals tracked yet. Add one!</p>
+                            </div>
+                        )}
+                    </main>
+                    <button className="fixed bottom-6 right-6 bg-blue-600 text-white w-16 h-16 rounded-full flex items-center justify-center text-4xl shadow-lg hover:bg-blue-700 transform hover:scale-110 transition-transform" onClick={() => setModalVisible(true)}>
+                        <span className="mb-1">+</span>
+                    </button>
+                    {modalVisible && <AddMealModal />}
+                </div>
+            );
+        };
+        
+
+        // --- Main App Component ---
+        const App = () => {
+            const [user, setUser] = useState(null);
+            const [authReady, setAuthReady] = useState(false);
+            const { auth, onAuthStateChanged } = window.firebase;
+
+            useEffect(() => {
+                const unsubscribe = onAuthStateChanged(auth, (currentUser) => {
+                    setUser(currentUser);
+                    setAuthReady(true);
+                });
+                return () => unsubscribe();
+            }, []);
+
+            if (!authReady) {
+                return (
+                    <div className="min-h-screen flex items-center justify-center">
+                        <p className="text-xl text-gray-500">Loading...</p>
+                    </div>
+                );
+            }
+
+            return user ? <TrackerScreen user={user} /> : <AuthScreen />;
+        };
+
+        const root = ReactDOM.createRoot(document.getElementById('root'));
+        root.render(<App />);
+    </script>
+</body>
+</html>
+
